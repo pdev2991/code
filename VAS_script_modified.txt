@@ -1,0 +1,166 @@
+script :
+
+#!/bin/bash
+#Written by : Devendra Singh
+# VAS flush script
+echo "VAS flush started on all nodes on `date` "
+date>/tmp/vas.out
+/opt/oracle/bda/bin/dcli -C '/opt/quest/bin/vastool flush'>>/tmp/vas.out
+if [ $? -eq 0 ];then
+
+cat /tmp/vas.out | grep -i "failed" | cut -d ':' -f 1 > /tmp/vasfailed.out
+uniq /tmp/vasfailed.out > /tmp/vasfailednodes.out
+   for hostname in $(cat /tmp/vasfailednodes.out)
+   do
+      ssh $hostname -T  "/opt/quest/bin/vastool flush"
+      echo "vas flush result was failed  on $hostname,so again done flush on the failed nodes"
+   done
+echo "VAS flush completed sucessfully on all nodes on `date`"
+elif [ $? -ne  0 ];then
+echo "There are vasd error messeges present on some hosts,checking details"
+
+cat /tmp/vas.out | grep -i "QAS Daemon (vasd) must be running to flush and reload caches" | cut -d ':' -f 1 > /tmp/vasderr.out
+uniq /tmp/vasderr.out > /tmp/vasderrnodes.out
+
+echo "These are the list of aftected nodes $(cat /tmp/vasderrnodes.out)"
+echo "checking vasd status on the affected nodes"
+   for hostname in $(cat /tmp/vasderrnodes.out)
+   do
+      ssh $hostname -T  "service vasd status | grep -i active;service vasd restart"
+      echo "Vasd was break on $hostname,now it is restarted"
+   done
+echo "Again starting vasflush on all the nodes"
+date>/tmp/vas.out
+/opt/oracle/bda/bin/dcli -C '/opt/quest/bin/vastool flush'>>/tmp/vas.out
+echo "VAS flush completed sucessfully  on all nodes on `date`"
+
+fi
+exit 0
+**********************************************************************************************
+
+
+outputs:
+
+when vas is successfull on all the hosts:
+
+VAS flush started on all nodes on Fri Jul  1 14:27:38 BST 2022
+VAS flush completed sucessfully on all nodes on Fri Jul  1 14:28:21 BST 2022
+***********************************************************************************************
+when VAS flush status is sucessfull(exit0),but on some nodes "failed" msgs are there :
+
+VAS flush started on all nodes on Fri Jul  1 13:00:01 BST 2022
+ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2029/2030 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2029/2030 records>: Caching Schema... OK
+Caching Users... OK
+Mapping mapped users ... OK
+Processing user overrides... OK
+Caching Groups... OK
+Caching Nested Memberships... OK
+Processing group overrides... OK
+Caching Srvinfo... OK
+Caching Netgroups... OK
+vas flush result was failed  on 192.168.8.12,so again done flush on the failed nodes
+Caching Schema... OK
+Caching Users... OK
+Mapping mapped users ... OK
+Processing user overrides... OK
+Caching Groups... OK
+Caching Nested Memberships... OK
+Processing group overrides... OK
+Caching Srvinfo... OK
+Caching Netgroups... OK
+vas flush result was failed  on 192.168.8.13,so again done flush on the failed nodes
+
+VAS flush completed sucessfully on all nodes on 13:01:01 
+**************************************************************************
+when vasd is down on some nodes:
+
+VAS flush started on all nodes on Fri Jul  1 14:30:28 BST 2022
+ERROR: Could not flush cache.
+Invalid VAS context, no available error message
+There are vasd error messeges present on some hosts,checking details
+These are the list of aftected nodes 192.168.8.14
+checking vasd status on the affected nodes
+   Active: inactive (dead) since Fri 2022-07-01 14:30:20 BST; 47s ago
+   Active: inactive (dead) since Fri 2022-07-01 14:30:20 BST; 48s ago
+Restarting vasd (via systemctl):  [  OK  ]
+Vasd was break on 192.168.8.14,now it is restarted
+Again starting vasflush on all the nodes
+VAS flush completed sucessfully  on all nodes on Fri Jul  1 14:31:53 BST 2022
+***************************************************************************************
+
+When any node is completely down: 
+
+if any node is down,then host info can be found in the script out file.
+
+like: on wat2 
+
+[root@gbwatbd2r01s01 ~]# nslookup 192.168.8.47
+Server:         127.0.0.1
+Address:        127.0.0.1#53
+
+47.8.168.192.in-addr.arpa       name = gbwatbd2r04s05.dunnhumby.co.uk.
+
+
+VAS flush started on all nodes on Sun Jul  3 21:00:01 BST 2022
+Unable to connect to nodes: ['192.168.8.47']       -----> this host was down. 
+There are vasd error messeges present on some hosts,checking details
+These are the list of aftected nodes
+checking vasd status on the affected nodes
+Again starting vasflush on all the nodes
+ERROR: Failed, returned or signalled 19
+VAS flush completed sucessfully  on all nodes on Sun Jul  3 21:05:30 BST 2022
+VAS flush started on all nodes on Sun Jul  3 22:00:01 BST 2022
+ERROR: Error flushing schema cache. "The following configured schema attributes do NOT exist in the domain schema: gidnumber ".
+ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: ERROR: Preload Nested Membesrships returned result 1 <Token groups processed for 2026/2027 records>: VAS flush completed sucessfully on all nodes on Sun Jul  3 22:03:28 BST 2022
+VAS flush started on all nodes on Sun Jul  3 23:00:01 BST 2022
+VAS flush completed sucessfully on all nodes on Sun Jul  3 23:03:16 BST 2022
+VAS flush started on all nodes on Mon Jul  4 00:00:01 BST 2022
+ERROR: DomainInfo Flush IPC failed, server error=5-This operation cannot be performed when vasd is in a disconnected state.
+ERROR: Failed to send domainsids flush IPC, error=5
+ERROR: Could not establish credentials
+VAS_ERR_DNS: Unable to discover ANY domain controllers.
+   Caused by:
+   KRB5_KDC_UNREACH (-1765328228): Cannot contact any KDC for requested realm
+Reason: unable to reach any KDC in realm DUNNHUMBY.CO.UK
+
+ERROR: Could not authenticate as host/
+VAS_ERR_DNS: Unable to discover ANY domain controllers.
+   Caused by:
+   KRB5_KDC_UNREACH (-1765328228): Cannot contact any KDC for requested realm
+Reason: unable to reach any KDC in realm DUNNHUMBY.CO.UK
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,37 @@
+#!/bin/bash
+#Written by : Devendra Singh
+# VAS flush script
+echo "VAS flush started on all nodes on `date` "
+date>/tmp/vas.out
+/opt/oracle/bda/bin/dcli -C '/opt/quest/bin/vastool flush'>>/tmp/vas.out
+if [ $? -eq 0 ];then
+
+cat /tmp/vas.out | grep -i "failed" | cut -d ':' -f 1 > /tmp/vasfailed.out
+uniq /tmp/vasfailed.out > /tmp/vasfailednodes.out
+   for hostname in $(cat /tmp/vasfailednodes.out)
+   do
+      ssh $hostname -T  "/opt/quest/bin/vastool flush"
+      echo "vas flush result was failed  on $hostname,so again done flush on the failed nodes"
+   done
+echo "VAS flush completed sucessfully on all nodes on `date`"
+elif [ $? -ne  0 ];then
+echo "There are vasd error messeges present on some hosts,checking details"
+
+cat /tmp/vas.out | grep -i "QAS Daemon (vasd) must be running to flush and reload caches" | cut -d ':' -f 1 > /tmp/vasderr.out
+uniq /tmp/vasderr.out > /tmp/vasderrnodes.out
+
+echo "These are the list of afftected nodes $(cat /tmp/vasderrnodes.out)"
+echo "If nothing displays in affected nodes,then there may be some other error"
+echo "checking vasd status on the affected nodes"
+   for hostname in $(cat /tmp/vasderrnodes.out)
+   do
+      ssh $hostname -T  "service vasd status | grep -i active;service vasd restart"
+      echo "Vasd was break on $hostname,now it is restarted"
+   done
+echo "Again starting vasflush on all the nodes"
+date>/tmp/vas.out
+/opt/oracle/bda/bin/dcli -C '/opt/quest/bin/vastool flush'>>/tmp/vas.out
+echo "VAS flush completed sucessfully  on all nodes on `date`"
+
+fi
+exit 0
